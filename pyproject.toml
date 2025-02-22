@@ -4,4 +4,56 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "beets>=2.2.0",
+    "confuse>=2.0.1",
+    "numpy<2.0",
+]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+sources = ["src"]
+only-include = ["src/beetsplug/essentia"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+    "responses>=0.25.6",
+    "six>=1.17.0",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra -q"
+testpaths = ["test"]
+python_files = ["test_*.py"]
+pythonpath = [
+    ".",
+    "beetsplug"
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py38"
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "B",   # flake8-bugbear
+    "I",   # isort
+]
+ignore = []
+
+[tool.coverage.run]
+source = ["beetsplug"]
+omit = ["test/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]

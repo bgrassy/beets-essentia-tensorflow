@@ -47,7 +47,7 @@ essentia:
     threads: 1                        # Number of parallel processing threads
     force: no                         # Force reanalysis of previously analyzed files
     quiet: no                         # Reduce output verbosity
-    
+
     models:
         embeddings:
             musicnn: /path/to/musicnn_model
@@ -81,7 +81,7 @@ essentia:
                 mood: no
                 dance: no
                 voice: no
-        
+
         database:
             store_probabilities: yes
             beat_resolution: 0.001
@@ -96,13 +96,13 @@ class EssentiaPlugin(BeetsPlugin):
     def __init__(self):
         super().__init__()
         self.setup_plugin()
-        
+
     def setup_plugin(self):
         """Initialize plugin configuration and models"""
         self.load_config()
         self.validate_model_paths()
         self.initialize_processors()
-        
+
     def commands(self):
         """Register plugin commands"""
         cmd = ui.Subcommand('essentia', help='Analyze music using Essentia')
