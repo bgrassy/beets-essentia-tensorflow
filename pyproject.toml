@@ -19,6 +19,7 @@ only-include = ["src/beetsplug/essentia"]
 
 [dependency-groups]
 dev = [
+    "mypy>=1.15.0",
     "pre-commit>=4.1.0",
     "pytest>=8.3.4",
     "responses>=0.25.6",
@@ -58,3 +59,16 @@ exclude_lines = [
     "raise NotImplementedError",
     "if TYPE_CHECKING:",
 ]
+
+[tool.mypy]
+python_version = "3.12"
+disallow_untyped_defs = true
+show_error_codes = true
+no_implicit_optional = true
+warn_return_any = true
+warn_unused_ignores = true
+exclude = ["test"]
+
+[[tool.mypy.overrides]]
+module = ["beets", "beets.plugins"]
+ignore_missing_imports = true

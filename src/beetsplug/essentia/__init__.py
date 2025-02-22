@@ -34,7 +34,7 @@ class EssentiaPlugin(BeetsPlugin):
             self._validate_config()
             self._log.debug("Plugin configuration validated successfully")
         except Exception as e:
-            self._log.error(f"Error during plugin setup: {str(e)}")
+            self._log.error(f"Error during plugin setup: {e!s}")
             raise
 
     def _validate_config(self):
@@ -47,7 +47,7 @@ class EssentiaPlugin(BeetsPlugin):
     def commands(self):
         """Create and register plugin commands."""
         essentia_cmd = ui.Subcommand(
-            "essentia", help="Extract file data using essentia", aliases=["ess"]
+            "essentia", help="Extract file data using essentia", aliases=["ess"],
         )
 
         def func(lib, opts, args):
@@ -62,10 +62,8 @@ class EssentiaPlugin(BeetsPlugin):
         """Process albums from command line."""
         self._log.debug("Album processing requested")
         # Album handling implementation will go here
-        pass
 
     def handle_item(self, lib, opts, args):
         """Process individual tracks from command line."""
         self._log.debug("Item processing requested")
         # Item handling implementation will go here
-        pass

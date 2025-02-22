@@ -34,12 +34,6 @@ jobs:
       run: |
         uv run pytest test
 
-    - name: Upload coverage
-      uses: codecov/codecov-action@v4
-      with:
-        file: ./coverage.xml
-        fail_ci_if_error: true
-
   ruff:
     runs-on: ubuntu-latest
     steps:

@@ -7,7 +7,8 @@
 - [x] Install initial dependencies
 - [x] Create basic package structure
 - [x] Set up test environment
-- [ ] Configure CI/CD pipeline
+- [x] Configure CI/CD pipeline
+- [ ] Add code coverage to CI/CD
 
 ## 1. Basic Plugin Structure
 ### Core Implementation
