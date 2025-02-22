@@ -1,5 +1,4 @@
-# test/test_essentia.py
-
+"""Essentia tests."""
 import logging
 
 import pytest
@@ -12,14 +11,14 @@ log.propagate = True
 log.setLevel(logging.DEBUG)
 
 
-def test_plugin_load():
+def test_plugin_load() -> None:
     """Test that plugin loads successfully."""
     plugin = EssentiaPlugin()
     assert isinstance(plugin, BeetsPlugin)
-    assert plugin._log.name == "beets.essentia"
+    assert plugin._log.name == "beets.essentia"  # noqa: SLF001
 
 
-def test_default_config():
+def test_default_config() -> None:
     """Test that default configuration loads correctly."""
     plugin = EssentiaPlugin()
     assert plugin.config["auto"].get() is False
@@ -29,7 +28,7 @@ def test_default_config():
     assert plugin.config["quiet"].get() is False
 
 
-def test_commands_registration():
+def test_commands_registration() -> None:
     """Test that commands are registered properly."""
     plugin = EssentiaPlugin()
     commands = plugin.commands()
@@ -41,27 +40,27 @@ def test_commands_registration():
     assert callable(command.func)
 
 
-def test_invalid_threads_config():
+def test_invalid_threads_config() -> None:
     """Test that invalid thread count raises error."""
     plugin = EssentiaPlugin()
     plugin.config["threads"] = 0
 
     with pytest.raises(ui.UserError):
-        plugin._validate_config()
+        plugin._validate_config()  # noqa: SLF001
 
 
-def test_logging_setup(caplog):
+def test_logging_setup(caplog: pytest.LogCaptureFixture) -> None:
     """Test that logging is properly configured."""
     plugin = EssentiaPlugin()
     with caplog.at_level(logging.DEBUG):
-        plugin._setup_plugin()
+        plugin._setup_plugin()  # noqa: SLF001
 
     logs = caplog.text
 
     assert "essentia: Plugin configuration validated successfully" in logs
 
 
-def test_command_execution(caplog):
+def test_command_execution(caplog: pytest.LogCaptureFixture) -> None:
     """Test basic command execution."""
     plugin = EssentiaPlugin()
     command = plugin.commands()[0]
@@ -73,7 +72,7 @@ def test_command_execution(caplog):
 
 
 @pytest.mark.parametrize("method_name", ["handle_album", "handle_item"])
-def test_handler_methods(method_name, caplog):
+def test_handler_methods(method_name: str, caplog: pytest.LogCaptureFixture) -> None:
     """Test that handler methods exist and log properly."""
     plugin = EssentiaPlugin()
     with caplog.at_level(logging.DEBUG):

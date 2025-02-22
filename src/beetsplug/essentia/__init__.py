@@ -1,4 +1,4 @@
-# beetsplug/essentia.py
+"""Essentia-tensorflow beets plugin."""
 
 import logging
 
@@ -13,7 +13,8 @@ class EssentiaPlugin(BeetsPlugin):
     including genre detection, mood analysis, and other audio characteristics.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize essentia plugin."""
         super().__init__()
 
         # Set up logging
@@ -28,7 +29,7 @@ class EssentiaPlugin(BeetsPlugin):
 
         self._setup_plugin()
 
-    def _setup_plugin(self):
+    def _setup_plugin(self) -> None:
         """Initialize plugin components and validate configuration."""
         try:
             self._validate_config()
@@ -37,20 +38,22 @@ class EssentiaPlugin(BeetsPlugin):
             self._log.error(f"Error during plugin setup: {e!s}")
             raise
 
-    def _validate_config(self):
+    def _validate_config(self) -> None:
         """Validate plugin configuration values."""
         if not isinstance(self.config["threads"].get(), int):
-            raise ui.UserError("threads must be an integer")
+            msg = "Threads must be an integer"
+            raise ui.UserError(msg)
         if self.config["threads"].get() < 1:
-            raise ui.UserError("threads must be at least 1")
+            msg = "Threads must be at least 1"
+            raise ui.UserError(msg)
 
-    def commands(self):
+    def commands(self) -> list[ui.Subcommand]:
         """Create and register plugin commands."""
         essentia_cmd = ui.Subcommand(
             "essentia", help="Extract file data using essentia", aliases=["ess"],
         )
 
-        def func(lib, opts, args):
+        def func(lib, opts, args) -> None:  # type: ignore[no-untyped-def] # noqa: ANN001, ARG001
             self._log.info("Essentia analysis starting...")
             # Command implementation will go here
             self._log.info("Essentia analysis complete")
@@ -58,12 +61,12 @@ class EssentiaPlugin(BeetsPlugin):
         essentia_cmd.func = func
         return [essentia_cmd]
 
-    def handle_album(self, lib, opts, args):
+    def handle_album(self, lib, opts, args) -> None:  # type: ignore[no-untyped-def] # noqa: ANN001, ARG002
         """Process albums from command line."""
         self._log.debug("Album processing requested")
         # Album handling implementation will go here
 
-    def handle_item(self, lib, opts, args):
+    def handle_item(self, lib, opts, args) -> None:  # type: ignore[no-untyped-def] # noqa: ANN001, ARG002
         """Process individual tracks from command line."""
         self._log.debug("Item processing requested")
         # Item handling implementation will go here
