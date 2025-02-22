@@ -11,29 +11,28 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        # Install a specific version of uv.
+        version: "0.5.9"
+
+    - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ matrix.python-version }}
-
-    - name: Install uv
-      run: |
-        python -m pip install uv
+        python-version-file: "pyproject.toml"
 
     - name: Install dependencies
       run: |
-        uv pip install -e ".[test]"
+        uv sync --all-extras --dev
 
     - name: Run tests
       run: |
-        python -m pytest test/ -v --cov=beetsplug --cov-report=xml
+        uv run pytest test
 
     - name: Upload coverage
       uses: codecov/codecov-action@v4
@@ -41,26 +40,8 @@ jobs:
         file: ./coverage.xml
         fail_ci_if_error: true
 
-  lint:
+  ruff:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
-
-    - name: Install uv
-      run: |
-        python -m pip install uv
-
-    - name: Install dependencies
-      run: |
-        uv pip install black ruff isort
-
-    - name: Check formatting
-      run: |
-        black --check .
-        isort --check-only .
-        ruff check .
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v3
