@@ -52,6 +52,7 @@ ignore = ["ANN101"]
     # The below are debateable
     "PLR2004", # Magic value used in comparison, ...
     "S311", # Standard pseudo-random generators are not suitable for cryptographic purposes
+    "I", # Ignore imports
 ]
 
 [tool.coverage.run]
@@ -77,5 +78,5 @@ warn_unused_ignores = true
 exclude = ["test"]
 
 [[tool.mypy.overrides]]
-module = ["beets", "beets.plugins"]
+module = ["beets", "beets.plugins", "beets.util"]
 ignore_missing_imports = true
