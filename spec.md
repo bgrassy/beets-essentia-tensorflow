@@ -5,6 +5,7 @@
 The Beets-Essentia plugin integrates Essentia's TensorFlow-based music analysis capabilities into the Beets music library manager. It extracts musical features using pre-trained models and stores results in both the Beets database and audio file tags.
 
 ### 1.1 Core Features
+
 - Genre and style recognition
 - Mood/emotion detection
 - Danceability estimation
@@ -13,6 +14,7 @@ The Beets-Essentia plugin integrates Essentia's TensorFlow-based music analysis 
 - Key detection and chord progression analysis
 
 ### 1.2 Design Principles
+
 - Configurable model paths and storage options
 - Efficient parallel processing with thread management
 - Resumable operations
@@ -22,6 +24,7 @@ The Beets-Essentia plugin integrates Essentia's TensorFlow-based music analysis 
 ## 2. Dependencies
 
 ### 2.1 Required Packages
+
 ```python
 from essentia.standard import *
 import essentia.streaming as ess
@@ -32,6 +35,7 @@ from beetsplug.base import BeetsPlugin
 ```
 
 ### 2.2 External Dependencies
+
 - Essentia library with TensorFlow support
 - Pre-trained TensorFlow models (user-provided)
 - Beets 1.6.0 or higher
@@ -39,58 +43,83 @@ from beetsplug.base import BeetsPlugin
 ## 3. Configuration
 
 ### 3.1 Plugin Configuration
+
 ```yaml
 essentia:
-    auto: no                          # Run automatically on import
-    dry-run: no                       # Test run without making changes
-    write: yes                        # Write to audio file tags
-    threads: 1                        # Number of parallel processing threads
-    force: no                         # Force reanalysis of previously analyzed files
-    quiet: no                         # Reduce output verbosity
+  auto: no # Run automatically on import
+  dry-run: no # Test run without making changes
+  write: yes # Write to audio file tags
+  threads: 1 # Number of parallel processing threads
+  force: no # Force reanalysis of previously analyzed files
+  quiet: no # Reduce output verbosity
 
-    models:
-        embeddings:
-            musicnn: /path/to/musicnn_model
-            vggish: /path/to/vggish_model
-        classification:
-            genre: /path/to/genre_model
-            style: /path/to/style_model
-            mood: /path/to/mood_model
-            danceability: /path/to/dance_model
-            voice_instrumental: /path/to/voice_model
-        rhythm:
-            tempocnn: /path/to/tempo_model
-            beats: /path/to/beats_model
-        harmony:
-            key: /path/to/key_model
-            chords: /path/to/chords_model
+  models:
+    embeddings:
+      discogs:
+        model_path: /path/to/discogs_model
+        model_output: "PartitionedCall:1"
+      musicnn:
+        model_path: /path/to/musicnn_model
+        model_output: "model/Softmax"
+    classification:
+      genre:
+        model_path: /path/to/genre_model
+        embedding_model: discogs
+        model_output: "model/Softmax"
+      style:
+        model_path: /path/to/style_model
+        embedding_model: discogs
+        model_output: "model/Softmax"
+      mood:
+        model_path: /path/to/mood_model
+        embedding_model: musicnn
+        model_output: "custom_mood_output"
+      danceability:
+        model_path: /path/to/dance_model
+        embedding_model: musicnn
+      voice_instrumental:
+        model_path: /path/to/voice_model
+        embedding_model: discogs
+    rhythm:
+      tempocnn:
+        model_path: /path/to/tempo_model
+      beats:
+        model_path: /path/to/beats_model
+    harmony:
+      key:
+        model_path: /path/to/key_model
+        model_output: "key_output"
+      chords:
+        model_path: /path/to/chords_model
+        model_output: "chords_output"
 
-    storage:
-        tags:
-            write: yes
-            update_existing: no
-            formats:
-                id3: yes
-                vorbis: yes
-                mp4: yes
-                asf: yes
-            fields:
-                bpm: yes
-                key: yes
-                genre: no
-                mood: no
-                dance: no
-                voice: no
+  storage:
+    tags:
+      write: yes
+      update_existing: no
+      formats:
+        id3: yes
+        vorbis: yes
+        mp4: yes
+        asf: yes
+      fields:
+        bpm: yes
+        key: yes
+        genre: no
+        mood: no
+        dance: no
+        voice: no
 
-        database:
-            store_probabilities: yes
-            beat_resolution: 0.001
-            chord_format: "simple"
+    database:
+      store_probabilities: yes
+      beat_resolution: 0.001
+      chord_format: "simple"
 ```
 
 ## 4. Implementation Structure
 
 ### 4.1 Main Plugin Class
+
 ```python
 class EssentiaPlugin(BeetsPlugin):
     def __init__(self):
@@ -126,7 +155,9 @@ class EssentiaPlugin(BeetsPlugin):
 ```
 
 ### 4.2 Processing Pipeline
+
 See the detailed pipeline specification in the previously created processing-pipeline artifact, including:
+
 - Audio loading
 - Parallel feature extraction groups
 - Thread management
@@ -135,7 +166,9 @@ See the detailed pipeline specification in the previously created processing-pip
 - Progress reporting
 
 ### 4.3 Resume Functionality
+
 See the detailed resume specification in the previously created resume-spec artifact, including:
+
 - State tracking
 - Resume logic
 - Error handling
@@ -144,6 +177,7 @@ See the detailed resume specification in the previously created resume-spec arti
 ## 5. Data Storage
 
 ### 5.1 Database Fields
+
 ```python
 class EssentiaPlugin(BeetsPlugin):
     item_fields = {
@@ -167,11 +201,13 @@ class EssentiaPlugin(BeetsPlugin):
 ```
 
 ### 5.2 Tag Mapping
+
 Detailed tag mapping for different audio formats as specified in the storage-mapping artifact.
 
 ## 6. Error Handling
 
 ### 6.1 Model Loading Errors
+
 ```python
 def validate_model_paths(self):
     """Ensure all required models exist and are valid"""
@@ -186,6 +222,7 @@ def validate_model_paths(self):
 ```
 
 ### 6.2 Processing Errors
+
 ```python
 def process_safe(self, func, *args, **kwargs):
     """Wrapper for safe processing with timeout"""
@@ -201,6 +238,7 @@ def process_safe(self, func, *args, **kwargs):
 ```
 
 ### 6.3 Storage Errors
+
 - Validation before storage
 - Rollback capabilities
 - Partial result storage
@@ -209,6 +247,7 @@ def process_safe(self, func, *args, **kwargs):
 ## 7. Testing Plan
 
 ### 7.1 Unit Tests
+
 - Model loading and validation
 - Audio file processing
 - Feature extraction accuracy
@@ -218,6 +257,7 @@ def process_safe(self, func, *args, **kwargs):
 - Error handling
 
 ### 7.2 Integration Tests
+
 - Full pipeline processing
 - Multiple file formats
 - Various configuration combinations
@@ -226,12 +266,14 @@ def process_safe(self, func, *args, **kwargs):
 - Database queries
 
 ### 7.3 Performance Tests
+
 - Memory usage monitoring
 - Processing speed benchmarks
 - Thread scaling tests
 - Large library processing
 
 ### 7.4 Test Data Requirements
+
 - Sample audio files in various formats
 - Pre-trained models for testing
 - Known-good feature extraction results
@@ -240,6 +282,7 @@ def process_safe(self, func, *args, **kwargs):
 ## 8. Documentation
 
 ### 8.1 Required Documentation
+
 - Installation guide
 - Configuration reference
 - Model download instructions
@@ -249,6 +292,7 @@ def process_safe(self, func, *args, **kwargs):
 - API reference
 
 ### 8.2 Example Usage
+
 ```bash
 # Install plugin
 pip install beets-essentia
@@ -272,12 +316,14 @@ beet essentia --restart
 ## 9. Performance Considerations
 
 ### 9.1 Memory Management
+
 - Model sharing between threads
 - Audio buffer reuse
 - Garbage collection hints
 - Memory monitoring
 
 ### 9.2 Processing Optimization
+
 - Batch processing capabilities
 - Caching mechanisms
 - Thread pool management
@@ -286,6 +332,7 @@ beet essentia --restart
 ## 10. Future Considerations
 
 ### 10.1 Potential Enhancements
+
 - Additional Essentia features
 - Custom model support
 - Alternative embedding models
@@ -293,6 +340,7 @@ beet essentia --restart
 - Web API integration
 
 ### 10.2 Maintenance
+
 - Version compatibility tracking
 - Dependency updates
 - Model updates

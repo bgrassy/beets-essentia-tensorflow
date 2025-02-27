@@ -3,11 +3,13 @@ name = "beets-essentia-tensorflow"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
     "beets>=2.2.0",
     "confuse>=2.0.1",
+    "essentia-tensorflow==2.1b6.dev1110",
     "numpy<2.0",
+    "tensorflow>=2.18.0",
 ]
 [build-system]
 requires = ["hatchling"]
@@ -15,7 +17,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 sources = ["src"]
-only-include = ["src/beetsplug/essentia"]
+only-include = ["src/beetsplug/essentia_tensorflow"]
 
 [dependency-groups]
 dev = [
@@ -37,11 +39,15 @@ pythonpath = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["ALL"]
-ignore = ["ANN101"]
+ignore = [
+    "ANN101",
+    "TD002", "TD003", "FIX002", # TODO related errors
+    "BLE001" # exception - need to fix handling
+]
 
 [tool.ruff.lint.extend-per-file-ignores]
 "test/*.py" = [
@@ -54,6 +60,8 @@ ignore = ["ANN101"]
     "S311", # Standard pseudo-random generators are not suitable for cryptographic purposes
     "I", # Ignore imports
 ]
+"test/test_model_loader.py" = ["SLF001"]
+
 
 [tool.coverage.run]
 source = ["beetsplug"]
@@ -78,5 +86,9 @@ warn_unused_ignores = true
 exclude = ["test"]
 
 [[tool.mypy.overrides]]
-module = ["beets", "beets.plugins", "beets.util"]
+module = [
+    "beets",
+    "beets.*",
+    "essentia.standard",
+]
 ignore_missing_imports = true

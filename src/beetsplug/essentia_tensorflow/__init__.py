@@ -36,6 +36,7 @@ class EssentiaPlugin(BeetsPlugin):
                     "embeddings": {
                         "musicnn": "",
                         "vggish": "",
+                        "discogs": "",
                     },
                     "classification": {
                         "genre": "",
@@ -106,7 +107,6 @@ class EssentiaPlugin(BeetsPlugin):
         if threads < 1:
             msg = "Threads must be at least 1"
             raise ui.UserError(msg)
-
 
     def _validate_model_paths(self) -> None:
         """Validate model paths if they are specified."""

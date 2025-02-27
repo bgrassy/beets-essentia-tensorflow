@@ -1,8 +1,9 @@
 """Essentia tests."""
+
 import logging
 
 from beets.plugins import BeetsPlugin
-from beetsplug.essentia import EssentiaPlugin
+from beetsplug.essentia_tensorflow import EssentiaPlugin
 from beets.test.helper import PluginTestCase, capture_log
 
 log = logging.getLogger("beets")
@@ -25,7 +26,6 @@ class TestEssentiaPlugin(PluginTestCase):
         assert isinstance(plugin, BeetsPlugin)
         assert plugin._log.name == "beets.essentia"  # noqa: SLF001
 
-
     def test_default_config(self) -> None:
         """Test that default configuration loads correctly."""
         plugin = EssentiaPlugin()
@@ -34,7 +34,6 @@ class TestEssentiaPlugin(PluginTestCase):
         assert plugin.config["threads"].get(int) == 1
         assert plugin.config["force"].get(bool) is False
         assert plugin.config["quiet"].get(bool) is False
-
 
     def test_commands_registration(self) -> None:
         """Test that commands are registered properly."""
@@ -47,13 +46,11 @@ class TestEssentiaPlugin(PluginTestCase):
         assert command.aliases == ["ess"]
         assert callable(command.func)
 
-
     def test_logging_setup(self) -> None:
         """Test that logging is properly configured."""
         with capture_log() as logs:
             EssentiaPlugin()
-            assert "essentia: Plugin configuration validated successfully" in logs
-
+            assert "Plugin configuration validated successfully" in logs
 
     def test_command_execution(self) -> None:
         """Test basic command execution."""
@@ -62,9 +59,8 @@ class TestEssentiaPlugin(PluginTestCase):
         with capture_log() as logs:
             command.func(None, None, None)
 
-        assert "essentia: Essentia analysis starting..." in logs
-        assert "essentia: Essentia analysis complete" in logs
-
+        assert "Essentia analysis starting..." in logs
+        assert "Essentia analysis complete" in logs
 
     def test_handle_album(self) -> None:
         """Test that handler methods exist and log properly."""
@@ -72,8 +68,7 @@ class TestEssentiaPlugin(PluginTestCase):
         with capture_log() as logs:
             plugin.handle_album(None, None, None)
 
-        assert "essentia: Album processing requested" in logs
-
+        assert "Album processing requested" in logs
 
     def test_handle_item(self) -> None:
         """Test that handler methods exist and log properly."""
@@ -81,4 +76,4 @@ class TestEssentiaPlugin(PluginTestCase):
         with capture_log() as logs:
             plugin.handle_item(None, None, None)
 
-        assert "essentia: Item processing requested" in logs
+        assert "Item processing requested" in logs
