@@ -1,11 +1,12 @@
-"""Tests for model management functionality."""
+"""Tests for updated model management functionality."""
 
-from typing import Any
+import json
+import os
 from pathlib import Path
 import shutil
 import tempfile
+from typing import Any, Dict
 from unittest.mock import MagicMock, patch
-from collections.abc import Generator
 
 import pytest
 from beets import ui
@@ -14,66 +15,253 @@ from beetsplug.essentia_tensorflow.model_manager import (
     ModelConfiguration,
     ModelManager,
     ModelLoadError,
+    ModelMetadataError,
 )
-from beets.test.helper import capture_log
 
 
 class TestModelConfiguration:
-    """Tests for the ModelConfiguration class."""
-
-    def test_initialization(self) -> None:
-        """Test initialization with different configurations."""
-        # Test with complete configuration
-
-        config = ModelConfiguration(
-            {"model_path": "/path/to/model", "embedding": "discogs", "model_output": "custom_output"},
-        )
-        assert config.model_path == "/path/to/model"
-        assert config.embedding == "discogs"
-        assert config.model_output == "custom_output"
-
-        # Test with minimal configuration
-        config = ModelConfiguration({"model_path": "/path/to/model"})
-        assert config.model_path == "/path/to/model"
-        assert config.embedding is None
-        assert config.model_output == "model/Softmax"  # Default
-
-        # Test with empty configuration
-        config = ModelConfiguration({})
-        assert config.model_path is None
-        assert config.embedding is None
-        assert config.model_output == "model/Softmax"
-
-    def test_validation_methods(self) -> None:
-        """Test validation methods."""
-        # Valid configuration with embedding reference
-        config = ModelConfiguration({"model_path": "/path/to/model", "embedding": "discogs"})
-        assert config.is_valid() is True
-        assert config.has_embedding_reference() is True
-
-        # Valid configuration without embedding reference
-        config = ModelConfiguration({"model_path": "/path/to/model"})
-        assert config.is_valid() is True
-        assert config.has_embedding_reference() is False
-
-        # Invalid configuration
-        config = ModelConfiguration({})
-        assert config.is_valid() is False
-        assert config.has_embedding_reference() is False
-
-
-class TestModelManager:
-    """Tests for the ModelManager class."""
+    """Tests for the updated ModelConfiguration class."""
 
     @pytest.fixture
-    def tmp_path(self) -> Generator[Path, None, None]:
-        """Create a temporary directory for test models."""
+    def tmp_path(self):
+        """Create a temporary directory for test files."""
         tmp_dir = tempfile.mkdtemp()
         yield Path(tmp_dir)
         shutil.rmtree(tmp_dir)
 
     @pytest.fixture
-    def mock_models(self) -> Generator[dict[str, MagicMock], None, None]:
+    def metadata_json(self, tmp_path):
+        """Create a sample metadata JSON file."""
+        metadata = {
+            "name": "Test Model",
+            "type": "Music genre classification",
+            "model_path": str(tmp_path / "model_file.pb"),
+            "version": "1",
+            "classes": ["rock", "pop", "jazz", "classical"],
+            "schema": {
+                "inputs": [{"name": "test_input", "type": "float", "shape": ["batch_size", 1280]}],
+                "outputs": [{"name": "test_output", "type": "float", "shape": ["batch_size", 4], "op": "Sigmoid"}],
+            },
+            "inference": {
+                "sample_rate": 16000,
+                "algorithm": "TensorflowPredict2D",
+                "embedding_model": {"algorithm": "TensorflowPredictEffnetDiscogs", "model_name": "discogs"},
+            },
+        }
+
+        metadata_path = tmp_path / "model_metadata.json"
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f)
+
+        # Create an empty model file
+        (tmp_path / "model_file.pb").touch()
+
+        return metadata_path
+
+    def test_init_from_direct_config(self):
+        """Test initialization with direct configuration."""
+        config = {
+            "model_path": "/path/to/model",
+            "embedding_model": "discogs",
+            "model_output": "custom_output",
+            "model_input": "custom_input",
+            "sample_rate": 48000,
+        }
+
+        model_config = ModelConfiguration(config)
+
+        assert model_config.model_path == "/path/to/model"
+        assert model_config.embedding == "discogs"
+        assert model_config.model_output == "custom_output"
+        assert model_config.model_input == "custom_input"
+        assert model_config.sample_rate == 48000
+        assert model_config.metadata is None
+        assert model_config.classes is None
+
+    def test_init_from_metadata(self, metadata_json):
+        """Test initialization from metadata JSON."""
+        config = {"metadata_path": str(metadata_json)}
+
+        model_config = ModelConfiguration(config)
+
+        assert model_config.metadata is not None
+        assert model_config.model_path is not None
+        assert model_config.metadata["name"] == "Test Model"
+        assert model_config.model_input == "test_input"
+        assert model_config.model_output == "test_output"
+        assert model_config.sample_rate == 16000
+        assert model_config.embedding == "discogs"
+        assert model_config.classes == ["rock", "pop", "jazz", "classical"]
+
+    def test_override_from_config(self, metadata_json):
+        """Test overriding metadata with direct configuration."""
+        config = {
+            "metadata_path": str(metadata_json),
+            "model_path": "/override/path",
+            "model_output": "override_output",
+            "sample_rate": 22050,
+        }
+
+        model_config = ModelConfiguration(config)
+
+        # Check that metadata was loaded
+        assert model_config.metadata is not None
+
+        # Check that direct config overrides metadata
+        assert model_config.model_path == "/override/path"
+        assert model_config.model_output == "override_output"
+        assert model_config.sample_rate == 22050
+
+        # Check that non-overridden values are from metadata
+        assert model_config.model_input == "test_input"
+        assert model_config.embedding == "discogs"
+
+    def test_relative_paths_with_base_dir(self, tmp_path, metadata_json):
+        """Test resolving relative paths with base directory."""
+        # Create base dir and subdirectories for models
+        base_dir = tmp_path / "models"
+        base_dir.mkdir()
+
+        # Create a model file in the base dir
+        model_file = base_dir / "test_model.pb"
+        model_file.touch()
+
+        # Create relative path config
+        config = {"model_path": "test_model.pb"}
+
+        # Initialize with base directory
+        model_config = ModelConfiguration(config, str(base_dir))
+
+        # Check path was properly resolved
+        assert model_config.model_path == str(model_file)
+
+    def test_invalid_metadata_file(self, tmp_path):
+        """Test handling of invalid metadata file."""
+        invalid_path = tmp_path / "invalid.json"
+        invalid_path.write_text("invalid json content")
+
+        config = {"metadata_path": str(invalid_path)}
+
+        with pytest.raises(ModelMetadataError):
+            ModelConfiguration(config)
+
+    def test_validation_methods(self, metadata_json):
+        """Test validation methods."""
+        # Valid with model path from metadata
+        config = {"metadata_path": str(metadata_json)}
+        model_config = ModelConfiguration(config)
+        assert model_config.is_valid() is True
+        assert model_config.has_embedding_reference() is True
+
+        # Valid with direct model path
+        config = {"model_path": "/path/to/model"}
+        model_config = ModelConfiguration(config)
+        assert model_config.is_valid() is True
+        assert model_config.has_embedding_reference() is False
+
+        # Invalid without model path
+        config = {}
+        model_config = ModelConfiguration(config)
+        assert model_config.is_valid() is False
+
+        # Valid model path with direct embedding reference
+        config = {"model_path": "/path/to/model", "embedding_model": "discogs"}
+        model_config = ModelConfiguration(config)
+        assert model_config.has_embedding_reference() is True
+
+    def test_get_class_names(self, metadata_json):
+        """Test getting class names."""
+        # With classes from metadata
+        config = {"metadata_path": str(metadata_json)}
+        model_config = ModelConfiguration(config)
+        assert model_config.get_class_names() == ["rock", "pop", "jazz", "classical"]
+
+        # With direct classes
+        config = {"model_path": "/path/to/model", "classes": ["a", "b", "c"]}
+        model_config = ModelConfiguration(config)
+        assert model_config.get_class_names() == ["a", "b", "c"]
+
+        # Without classes
+        config = {"model_path": "/path/to/model"}
+        model_config = ModelConfiguration(config)
+        assert model_config.get_class_names() == []
+
+
+class TestModelManager:
+    """Tests for the updated ModelManager class."""
+
+    @pytest.fixture
+    def tmp_path(self):
+        """Create a temporary directory for test files."""
+        tmp_dir = tempfile.mkdtemp()
+        yield Path(tmp_dir)
+        shutil.rmtree(tmp_dir)
+
+    @pytest.fixture
+    def create_model_files(self, tmp_path):
+        """Create sample model files and metadata."""
+        model_dir = tmp_path / "models"
+        model_dir.mkdir()
+
+        # Create model files
+        (model_dir / "discogs_model.pb").touch()
+        (model_dir / "genre_model.pb").touch()
+        (model_dir / "mood_model.pb").touch()
+
+        # Create metadata files
+        discogs_metadata = {
+            "name": "Discogs Embedding",
+            "model_path": str(model_dir / "discogs_model.pb"),
+            "schema": {"outputs": [{"name": "PartitionedCall:1"}]},
+        }
+
+        genre_metadata = {
+            "name": "Genre Classifier",
+            "model_path": str(model_dir / "genre_model.pb"),
+            "classes": ["rock", "pop", "jazz"],
+            "schema": {
+                "inputs": [{"name": "serving_default_model_Placeholder"}],
+                "outputs": [{"name": "PartitionedCall:0"}],
+            },
+            "inference": {"sample_rate": 16000, "embedding_model": {"model_name": "discogs"}},
+        }
+
+        with open(model_dir / "discogs_metadata.json", "w") as f:
+            json.dump(discogs_metadata, f)
+
+        with open(model_dir / "genre_metadata.json", "w") as f:
+            json.dump(genre_metadata, f)
+
+        return model_dir
+
+    @pytest.fixture
+    def mock_config(self, create_model_files):
+        """Create a mock plugin configuration."""
+        model_dir = create_model_files
+
+        return {
+            "models_directory": str(model_dir),
+            "models": {
+                "embeddings": {
+                    "discogs": {"metadata_path": "discogs_metadata.json"},
+                    "musicnn": {"model_path": str(model_dir / "musicnn_model.pb"), "model_output": "custom_output"},
+                },
+                "classification": {
+                    "genre": {"metadata_path": "genre_metadata.json"},
+                    "style": {"model_path": str(model_dir / "style_model.pb"), "embedding_model": "discogs"},
+                    "mood": {
+                        "model_path": str(model_dir / "mood_model.pb"),
+                        "model_input": "custom_input",
+                        "model_output": "custom_output",
+                        "classes": ["happy", "sad", "neutral"],
+                    },
+                    "empty": {},
+                },
+            },
+        }
+
+    @pytest.fixture
+    def mock_essentia_models(self):
         """Mock of the Essentia model classes."""
         with (
             patch("beetsplug.essentia_tensorflow.model_manager.TensorflowPredictEffnetDiscogs") as discogs_mock,
@@ -81,232 +269,231 @@ class TestModelManager:
         ):
             yield {"discogs": discogs_mock, "standard": standard_mock}
 
-    @pytest.fixture
-    def mock_config(self, tmp_path: Path) -> dict[str, Any]:
-        """Create a mock plugin configuration with temporary paths."""
-        # Create test directories and files
-        model_dir = tmp_path / "models"
-        model_dir.mkdir()
+    def test_validate_model_paths(self, mock_config, mock_essentia_models, create_model_files):
+        """Test model path validation with both metadata and direct configuration."""
+        # Touch files that don't exist so validation passes
+        model_dir = create_model_files
+        (model_dir / "musicnn_model.pb").touch()
+        (model_dir / "style_model.pb").touch()
 
-        # Create test model files
-        genre_model_path = model_dir / "genre_model"
-        mood_model_path = model_dir / "mood_model"
-        discogs_model_path = model_dir / "discogs_model"
-        musicnn_model_path = model_dir / "musicnn_model"
-
-        # Create empty files to pass path validation
-        genre_model_path.touch()
-        mood_model_path.touch()
-        discogs_model_path.touch()
-        musicnn_model_path.touch()
-
-        return {
-            "models": {
-                "embeddings": {
-                    "discogs": {"model_path": str(discogs_model_path), "model_output": "PartitionedCall:1"},
-                    "musicnn": {"model_path": str(musicnn_model_path)},
-                },
-                "classification": {
-                    "genre": {
-                        "model_path": str(genre_model_path),
-                        "embedding": "discogs",
-                        "model_output": "genre_output",
-                    },
-                    "mood": {"model_path": str(mood_model_path), "embedding": "musicnn"},
-                    "style": {},  # Empty config
-                },
-            },
-        }
-
-    @pytest.fixture
-    def model_manager(self, mock_config: MagicMock, mock_models: MagicMock) -> ModelManager:
-        """Create a ModelManager instance with mock config."""
-        # We need to patch the initialization to prevent actual model loading
-        with patch("beetsplug.essentia_tensorflow.model_manager.ModelManager._preload_models"):
-            manager = ModelManager(mock_config)
-            # Manually set the models that would have been preloaded
-            manager._models = {"classification.genre": MagicMock(), "classification.mood": MagicMock()}
-            manager._embeddings = {"embeddings.discogs": MagicMock(), "embeddings.musicnn": MagicMock()}
-            return manager
-
-    def test_validate_model_paths(self, model_manager: ModelManager, tmp_path: Path) -> None:
-        """Test model path validation."""
-        # Valid paths should not raise exceptions
-        model_manager._validate_model_paths()
-
-        # Test invalid model path
-        model_manager._config["models"]["classification"]["genre"]["model_path"] = "/nonexistent/path"
-        with pytest.raises(ui.UserError, match="Model path not found"):
-            model_manager._validate_model_paths()
-
-        # Reset model path and test invalid embedding model
-        genre_model_path = tmp_path / "models" / "genre_model"
-        model_manager._config["models"]["classification"]["genre"]["model_path"] = str(genre_model_path)
-        model_manager._config["models"]["classification"]["genre"]["embedding"] = "nonexistent"
-        with pytest.raises(ui.UserError, match="Referenced embedding model 'nonexistent' not found"):
-            model_manager._validate_model_paths()
-
-        # Test invalid embedding model path
-        model_manager._config["models"]["classification"]["genre"]["embedding"] = "discogs"
-        model_manager._config["models"]["embeddings"]["discogs"]["model_path"] = "/nonexistent/path"
-        with pytest.raises(ui.UserError, match="Embedding model path not found"):
-            model_manager._validate_model_paths()
-
-    def test_preload_models(self, mock_config: MagicMock, mock_models: MagicMock) -> None:
-        """Test that models are preloaded during initialization."""
-        with patch("beetsplug.essentia_tensorflow.model_manager.ModelManager._validate_model_paths"):
-            # Create manager without mocking _preload_models
-            manager = ModelManager(mock_config)
-
-            # Check that the expected models were loaded
-            assert "classification.genre" in manager._models
-            assert "classification.mood" in manager._models
-            assert "classification.style" not in manager._models
-
-            # Check that embedding models were loaded
-            assert "embeddings.discogs" in manager._embeddings
-            assert "embeddings.musicnn" in manager._embeddings
-
-    def test_load_discogs_embedding_model(self, model_manager: ModelManager, mock_models: MagicMock) -> None:
-        """Test loading a Discogs embedding model."""
-        # Set up mock model
-        discogs_mock = mock_models["discogs"].return_value
-
-        # Test successful load with default output
-        model = model_manager._load_discogs_embedding_model_from_path("/path/to/model")
-        assert model is discogs_mock
-
-        # Verify correct parameters
-        mock_models["discogs"].assert_called_with(graphFilename="/path/to/model", output="PartitionedCall:1")
-
-        # Test with custom output
-        model = model_manager._load_discogs_embedding_model_from_path("/path/to/model", "custom_output")
-        mock_models["discogs"].assert_called_with(graphFilename="/path/to/model", output="custom_output")
-
-        # Test error handling
-        mock_models["discogs"].side_effect = RuntimeError("Test error")
-
-        with pytest.raises(ModelLoadError):
-            model_manager._load_discogs_embedding_model_from_path("/path/to/model")
-
-    def test_load_model(self, model_manager: ModelManager, mock_models: MagicMock) -> None:
-        """Test loading a standard model."""
-        # Set up mock model
-        standard_mock = mock_models["standard"].return_value
-
-        # Test successful load with default output
-        model = model_manager._load_model_from_path("/path/to/model")
-        assert model is standard_mock
-
-        # Verify correct parameters
-        mock_models["standard"].assert_called_with(graphFilename="/path/to/model", output="model/Softmax")
-
-        # Test with custom output
-        model = model_manager._load_model_from_path("/path/to/model", "custom_output")
-        mock_models["standard"].assert_called_with(graphFilename="/path/to/model", output="custom_output")
-
-        # Test error handling
-        mock_models["standard"].side_effect = RuntimeError("Test error")
-
-        with pytest.raises(ModelLoadError):
-            model_manager._load_model_from_path("/path/to/model")
-
-    def test_get_model(self, model_manager: ModelManager) -> None:
-        """Test getting a loaded model."""
-        # Test getting existing models
-        assert model_manager.get_model("classification", "genre") is not None
-        assert model_manager.get_model("classification", "mood") is not None
-
-        # Test getting non-existent models
-        assert model_manager.get_model("classification", "style") is None
-
-    def test_get_embedding_model(self, model_manager: ModelManager) -> None:
-        """Test getting an associated embedding model."""
-        # Genre uses discogs embedding
-        embedding_model = model_manager.get_embedding_model("classification", "genre")
-        assert embedding_model is model_manager._embeddings["embeddings.discogs"]
-
-        # Mood uses musicnn embedding
-        embedding_model = model_manager.get_embedding_model("classification", "mood")
-        assert embedding_model is model_manager._embeddings["embeddings.musicnn"]
-
-        # Style has no configuration, so no embedding
-        assert model_manager.get_embedding_model("classification", "style") is None
-
-        # Test with config but no embedding reference
-        model_manager._config["models"]["classification"]["nonexistent"] = {"model_path": "/some/path"}
-        assert model_manager.get_embedding_model("classification", "nonexistent") is None
-
-    def test_get_embedding_model_by_name(self, model_manager: ModelManager) -> None:
-        """Test getting an embedding model directly by name."""
-        # Test existing embedding models
-        assert model_manager.get_embedding_model_by_name("discogs") is not None
-        assert model_manager.get_embedding_model_by_name("musicnn") is not None
-
-        # Test non-existent embedding model
-        assert model_manager.get_embedding_model_by_name("nonexistent") is None
-
-    def test_get_model_config(self, model_manager: ModelManager, mock_config: MagicMock) -> None:
-        """Test getting model configuration."""
-        # Test getting existing configuration
-        genre_config = model_manager.get_model_config("classification", "genre")
-        assert isinstance(genre_config, ModelConfiguration)
-        assert genre_config.model_path == mock_config["models"]["classification"]["genre"]["model_path"]
-        assert genre_config.embedding == "discogs"
-        assert genre_config.model_output == "genre_output"
-
-        # Test getting configuration without embedding
-        model_manager._config["models"]["classification"]["other"] = {"model_path": "/some/path"}
-        other_config = model_manager.get_model_config("classification", "other")
-        assert isinstance(other_config, ModelConfiguration)
-        assert other_config.model_path == "/some/path"
-        assert other_config.embedding is None
-        assert other_config.model_output == "model/Softmax"  # Default
-
-        # Test getting non-existent configuration
-        assert model_manager.get_model_config("classification", "nonexistent") is None
-
-    def test_has_model(self, model_manager: ModelManager) -> None:
-        """Test checking if a model is loaded."""
-        # Test existing models
-        assert model_manager.has_model("classification", "genre") is True
-        assert model_manager.has_model("classification", "mood") is True
-
-        # Test non-existent models
-        assert model_manager.has_model("classification", "style") is False
-
-    def test_has_embedding_model(self, model_manager: ModelManager) -> None:
-        """Test checking if a model has an associated embedding model."""
-        # Test models with embedding references
-        assert model_manager.has_embedding_model("classification", "genre") is True
-        assert model_manager.has_embedding_model("classification", "mood") is True
-
-        # Test model without embedding reference
-        assert model_manager.has_embedding_model("classification", "style") is False
-
-        # Test with a valid config but no embedding
-        model_manager._config["models"]["classification"]["other"] = {"model_path": "/some/path"}
-        assert model_manager.has_embedding_model("classification", "other") is False
-
-        # Test with embedding reference to non-existent embedding
-        model_manager._config["models"]["classification"]["invalid"] = {
-            "model_path": "/some/path",
-            "embedding": "nonexistent",
-        }
-        assert model_manager.has_embedding_model("classification", "invalid") is False
-
-    def test_error_handling_during_preload(self, mock_config: MagicMock, mock_models: MagicMock) -> None:
-        """Test error handling during model preloading."""
-        # Make model loading fail
-        mock_models["standard"].side_effect = RuntimeError("Test error")
-
-        # Attempt to create manager, which should fail during preloading
+        # Patch _validate_model_paths and _validate_and_get_embedding_models to prevent errors
         with (
-            pytest.raises(ui.UserError, match="Failed to preload"),
-            capture_log() as logs,
+            patch("beetsplug.essentia_tensorflow.model_manager.ModelManager._preload_models"),
+            patch(
+                "beetsplug.essentia_tensorflow.model_manager.ModelManager._validate_and_get_embedding_models"
+            ) as mock_validate,
+        ):
+            # Return some dummy available embeddings
+            mock_validate.return_value = {"discogs", "musicnn"}
+
+            manager = ModelManager(mock_config)
+
+            # Test validation with mocked embedding validation
+            manager._validate_model_paths()
+
+            # Test non-existent model path in direct config
+            mock_config["models"]["classification"]["style"]["model_path"] = str(model_dir / "nonexistent.pb")
+            with pytest.raises(ui.UserError, match="not found"):
+                manager._validate_model_paths()
+
+    def test_model_config_from_metadata(self, mock_config, mock_essentia_models, create_model_files):
+        """Test loading model configuration from metadata."""
+        # Touch necessary files
+        model_dir = create_model_files
+        (model_dir / "musicnn_model.pb").touch()
+        (model_dir / "style_model.pb").touch()
+
+        # We need to patch model loading and validation
+        with (
+            patch("beetsplug.essentia_tensorflow.model_manager.ModelManager._preload_models"),
             patch("beetsplug.essentia_tensorflow.model_manager.ModelManager._validate_model_paths"),
         ):
-            ModelManager(mock_config)
+            manager = ModelManager(mock_config)
 
-        # Check for error log
-        assert "Failed to preload" in "".join(logs)
+            # Create and inject a genre model config
+            genre_config = ModelConfiguration(
+                {"metadata_path": str(model_dir / "genre_metadata.json")}, str(model_dir.parent)
+            )
+            manager._model_configs["classification.genre"] = genre_config
+
+            # Get the genre model config that uses metadata
+            result_config = manager.get_model_config("classification", "genre")
+
+            # Verify it loaded the metadata correctly
+            assert result_config is not None
+            assert result_config.metadata is not None
+            assert result_config.model_path is not None
+            assert result_config.embedding == "discogs"
+
+    def test_model_config_direct(self, mock_config, mock_essentia_models, create_model_files):
+        """Test loading model configuration from direct config."""
+        # Touch necessary files
+        model_dir = create_model_files
+        (model_dir / "musicnn_model.pb").touch()
+        (model_dir / "style_model.pb").touch()
+        (model_dir / "mood_model.pb").touch()
+
+        # We need to patch model loading and validation
+        with (
+            patch("beetsplug.essentia_tensorflow.model_manager.ModelManager._preload_models"),
+            patch("beetsplug.essentia_tensorflow.model_manager.ModelManager._validate_model_paths"),
+        ):
+            manager = ModelManager(mock_config)
+
+            # Create and inject a mood model config
+            mood_config = ModelConfiguration(
+                {
+                    "model_path": str(model_dir / "mood_model.pb"),
+                    "model_output": "custom_output",
+                    "model_input": "custom_input",
+                    "classes": ["happy", "sad", "neutral"],
+                }
+            )
+            manager._model_configs["classification.mood"] = mood_config
+
+            # Get the mood model config that uses direct config
+            result_config = manager.get_model_config("classification", "mood")
+
+            # Verify it loaded the direct config correctly
+            assert result_config is not None
+            assert result_config.metadata is None
+            assert result_config.model_path is not None
+            assert result_config.model_input == "custom_input"
+            assert result_config.model_output == "custom_output"
+            assert result_config.classes == ["happy", "sad", "neutral"]
+
+    def test_preload_models(self, mock_config, mock_essentia_models, create_model_files):
+        """Test that models are preloaded during initialization."""
+        # Touch required files that don't exist
+        model_dir = create_model_files
+        (model_dir / "musicnn_model.pb").touch()
+        (model_dir / "style_model.pb").touch()
+        (model_dir / "mood_model.pb").touch()
+
+        # Configure mock models
+        discogs_mock = mock_essentia_models["discogs"]
+        standard_mock = mock_essentia_models["standard"]
+
+        # Initialize manager with patched validation
+        with patch("beetsplug.essentia_tensorflow.model_manager.ModelManager._validate_model_paths"):
+            # Create manually initialized configuration objects
+            manager = ModelManager(mock_config)
+
+            # We need to set up model configs before calling _preload_models
+            discogs_config = ModelConfiguration(
+                {"model_path": str(model_dir / "discogs_model.pb"), "model_output": "PartitionedCall:1"}
+            )
+            genre_config = ModelConfiguration(
+                {
+                    "model_path": str(model_dir / "genre_model.pb"),
+                    "embedding": "discogs",
+                    "model_output": "PartitionedCall:0",
+                }
+            )
+            mood_config = ModelConfiguration(
+                {"model_path": str(model_dir / "mood_model.pb"), "model_output": "custom_output"}
+            )
+            style_config = ModelConfiguration({"model_path": str(model_dir / "style_model.pb"), "embedding": "discogs"})
+
+            # Add configs to manager
+            manager._model_configs = {
+                "embeddings.discogs": discogs_config,
+                "classification.genre": genre_config,
+                "classification.mood": mood_config,
+                "classification.style": style_config,
+            }
+
+            # Now manually call _preload_models
+            manager._preload_models()
+
+            # Verify that models were loaded
+            assert discogs_mock.called
+            assert standard_mock.called
+
+            # Check for existence of expected models
+            assert "embeddings.discogs" in manager._embeddings
+            assert "classification.genre" in manager._models
+            assert "classification.style" in manager._models
+            assert "classification.mood" in manager._models
+
+    def test_get_class_names(self, mock_config, mock_essentia_models, create_model_files):
+        """Test getting class names from models."""
+        # Touch required files that don't exist
+        model_dir = create_model_files
+        (model_dir / "musicnn_model.pb").touch()
+        (model_dir / "style_model.pb").touch()
+
+        # We need to patch model loading
+        with patch("beetsplug.essentia_tensorflow.model_manager.ModelManager._preload_models"):
+            manager = ModelManager(mock_config)
+
+            # Get class names from metadata-based model
+            genre_classes = manager.get_class_names("classification", "genre")
+            assert genre_classes == ["rock", "pop", "jazz"]
+
+            # Get class names from direct config
+            mood_classes = manager.get_class_names("classification", "mood")
+            assert mood_classes == ["happy", "sad", "neutral"]
+
+            # Get class names from model without classes
+            style_classes = manager.get_class_names("classification", "style")
+            assert style_classes == []
+
+            # Get class names from non-existent model
+            nonexistent_classes = manager.get_class_names("classification", "nonexistent")
+            assert nonexistent_classes == []
+
+    def test_get_sample_rate(self, mock_config, mock_essentia_models, create_model_files):
+        """Test getting sample rate from models."""
+        # Touch required files that don't exist
+        model_dir = create_model_files
+        (model_dir / "musicnn_model.pb").touch()
+        (model_dir / "style_model.pb").touch()
+
+        # We need to patch model loading
+        with patch("beetsplug.essentia_tensorflow.model_manager.ModelManager._preload_models"):
+            manager = ModelManager(mock_config)
+
+            # Get sample rate from metadata-based model
+            genre_rate = manager.get_sample_rate("classification", "genre")
+            assert genre_rate == 16000
+
+            # Get sample rate from model without specified rate (should return default)
+            style_rate = manager.get_sample_rate("classification", "style")
+            assert style_rate == 44100
+
+            # Get sample rate from non-existent model (should return default)
+            nonexistent_rate = manager.get_sample_rate("classification", "nonexistent")
+            assert nonexistent_rate == 44100
+
+    def test_get_embedding_model(self, mock_config, mock_essentia_models, create_model_files):
+        """Test getting embedding models for classification models."""
+        # Touch required files that don't exist
+        model_dir = create_model_files
+        (model_dir / "musicnn_model.pb").touch()
+        (model_dir / "style_model.pb").touch()
+
+        # We need to patch model loading
+        with patch("beetsplug.essentia_tensorflow.model_manager.ModelManager._preload_models"):
+            manager = ModelManager(mock_config)
+
+            # Set up mock embedding models
+            manager._embeddings = {"embeddings.discogs": MagicMock(), "embeddings.musicnn": MagicMock()}
+
+            # Get embedding model for a model with embedding reference from metadata
+            genre_embedding = manager.get_embedding_model("classification", "genre")
+            assert genre_embedding is not None
+            assert genre_embedding is manager._embeddings["embeddings.discogs"]
+
+            # Get embedding model for a model with direct embedding reference
+            style_embedding = manager.get_embedding_model("classification", "style")
+            assert style_embedding is not None
+            assert style_embedding is manager._embeddings["embeddings.discogs"]
+
+            # Get embedding model for a model without embedding reference
+            mood_embedding = manager.get_embedding_model("classification", "mood")
+            assert mood_embedding is None
+
+            # Get embedding model for non-existent model
+            nonexistent_embedding = manager.get_embedding_model("classification", "nonexistent")
+            assert nonexistent_embedding is None

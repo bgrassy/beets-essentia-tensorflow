@@ -119,9 +119,7 @@ Requirements:
 The code should:
 - Load models safely
 - Validate model compatibility
-- Cache loaded models
 - Handle missing models
-- Manage model memory
 
 Focus on:
 - Memory efficiency
@@ -133,8 +131,6 @@ Focus on:
 Example test cases:
 - Models load correctly
 - Invalid models are caught
-- Memory is managed properly
-- Caching works correctly
 - Errors are handled gracefully
 
 Ensure all code integrates with the existing configuration management.

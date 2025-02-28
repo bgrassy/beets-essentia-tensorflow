@@ -44,8 +44,16 @@ from beetsplug.base import BeetsPlugin
 
 ### 3.1 Plugin Configuration
 
+The plugin supports two approaches for model configuration:
+
+1. Using metadata JSON files for comprehensive model information
+2. Direct parameter configuration for more control
+
+Both approaches can be mixed, with direct parameters overriding metadata values.
+
 ```yaml
 essentia:
+  # Global configuration
   auto: no # Run automatically on import
   dry-run: no # Test run without making changes
   write: yes # Write to audio file tags
@@ -53,45 +61,52 @@ essentia:
   force: no # Force reanalysis of previously analyzed files
   quiet: no # Reduce output verbosity
 
+  # Optional: base directory for models (relative paths in config or metadata will be resolved against this)
+  models_directory: /path/to/models/base/directory
+
   models:
     embeddings:
       discogs:
-        model_path: /path/to/discogs_model
-        model_output: "PartitionedCall:1"
+        # Option 1: Using metadata JSON
+        metadata_path: /path/to/discogs_model_metadata.json
+        # Option 2: Direct configuration (overrides metadata)
+        model_path: /path/to/override/discogs_model.pb  # Optional override
+        model_output: "PartitionedCall:1"  # Optional override
       musicnn:
-        model_path: /path/to/musicnn_model
-        model_output: "model/Softmax"
+        metadata_path: /path/to/musicnn_model_metadata.json
+        # Can override specific parameters
+        model_output: "custom_output"
     classification:
       genre:
-        model_path: /path/to/genre_model
-        embedding_model: discogs
-        model_output: "model/Softmax"
+        # Option 1: Using metadata JSON
+        metadata_path: /path/to/genre_model_metadata.json
+        # Option 2: Direct configuration (overrides metadata)
+        model_path: /path/to/override/genre_model.pb  # Optional override
+        model_input: "serving_default_model_Placeholder"  # Optional override
+        model_output: "PartitionedCall:0"  # Optional override
+        embedding_model: "discogs"  # Optional override - reference to embedding model
       style:
-        model_path: /path/to/style_model
-        embedding_model: discogs
+        # Option 2: Direct configuration only (no metadata)
+        model_path: /path/to/style_model.pb
+        model_input: "serving_default_model_Placeholder"
         model_output: "model/Softmax"
+        embedding_model: "discogs"
       mood:
-        model_path: /path/to/mood_model
-        embedding_model: musicnn
-        model_output: "custom_mood_output"
+        metadata_path: /path/to/mood_model_metadata.json
       danceability:
-        model_path: /path/to/dance_model
-        embedding_model: musicnn
+        metadata_path: /path/to/dance_model_metadata.json
       voice_instrumental:
-        model_path: /path/to/voice_model
-        embedding_model: discogs
+        metadata_path: /path/to/voice_model_metadata.json
     rhythm:
       tempocnn:
-        model_path: /path/to/tempo_model
+        metadata_path: /path/to/tempo_model_metadata.json
       beats:
-        model_path: /path/to/beats_model
+        metadata_path: /path/to/beats_model_metadata.json
     harmony:
       key:
-        model_path: /path/to/key_model
-        model_output: "key_output"
+        metadata_path: /path/to/key_model_metadata.json
       chords:
-        model_path: /path/to/chords_model
-        model_output: "chords_output"
+        metadata_path: /path/to/chords_model_metadata.json
 
   storage:
     tags:
@@ -115,6 +130,73 @@ essentia:
       beat_resolution: 0.001
       chord_format: "simple"
 ```
+
+### 3.2 Model Metadata JSON Format
+
+Each model can have a corresponding metadata JSON file that describes the model's properties, inputs/outputs, and class labels.
+
+#### Example Model Metadata:
+
+```json
+{
+    "name": "Genre Discogs400",
+    "type": "Music genre classification",
+    "link": "https://essentia.upf.edu/models/classification-heads/genre_discogs400/genre_discogs400-discogs-effnet-1.pb",
+    "model_path": "/path/to/model/genre_discogs400-discogs-effnet-1.pb",
+    "version": "1",
+    "description": "Prediction of 400 music styles from the Discogs taxonomy",
+    "author": "Author Name",
+    "email": "author@example.com",
+    "release_date": "2023-05-04",
+    "framework": "tensorflow",
+    "framework_version": "2.8.0",
+    "classes": [
+        "Class1",
+        "Class2",
+        "..."
+    ],
+    "schema": {
+        "inputs": [
+            {
+                "name": "serving_default_model_Placeholder",
+                "type": "float",
+                "shape": ["batch_size", 1280]
+            }
+        ],
+        "outputs": [
+            {
+                "name": "PartitionedCall:0",
+                "type": "float",
+                "shape": ["batch_size", 400],
+                "op": "Sigmoid",
+                "output_purpose": "predictions"
+            }
+        ]
+    },
+    "inference": {
+        "sample_rate": 16000,
+        "algorithm": "TensorflowPredict2D",
+        "embedding_model": {
+            "algorithm": "TensorflowPredictEffnetDiscogs",
+            "model_name": "discogs-effnet-bs64-1",
+            "link": "https://essentia.upf.edu/models/music-style-classification/discogs-effnet/discogs-effnet-bs64-1.pb"
+        }
+    }
+}
+```
+
+### 3.3 Configuration Resolution Process
+
+When loading a model, the plugin will:
+
+1. Check if a metadata file is specified
+2. If yes, load model parameters from the metadata
+3. Check for override parameters in the configuration
+4. Apply any override parameters, replacing metadata values
+5. Validate the final configuration
+6. Load the model
+
+Relative paths in both configuration and metadata can use the optional global `models_directory` as a base path.
 
 ## 4. Implementation Structure
 
